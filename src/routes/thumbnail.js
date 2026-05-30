@@ -66,8 +66,9 @@ router.post('/', upload.single('image'), async (req, res) => {
             pipeline = pipeline.flatten({ background: '#ffffff' });
         }
 
-        const thumbnailBuffer = await pipeline.toFormat(format, { quality: quality }).toBuffer();
-        const thumbMeta = await sharp(thumbnailBuffer).metadata();
+        const { data: thumbnailBuffer, info: thumbMeta } = await pipeline
+            .toFormat(format, { quality: quality })
+            .toBuffer({ resolveWithObject: true });
 
         // 6. Send the thumbnail back to the user
         res.set('Content-Type', `image/${format}`);

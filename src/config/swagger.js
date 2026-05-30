@@ -1,6 +1,6 @@
 const swaggerJsdoc = require('swagger-jsdoc');
 
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 7187;
 
 const swaggerOptions = {
     definition: {
@@ -204,7 +204,7 @@ const swaggerOptions = {
  * /usage:
  *   get:
  *     summary: Retrieve API usage metrics
- *     description: Returns the total number of times the `/optimize` endpoint has been used successfully.
+ *     description: Returns the total number of image processing API calls made across all endpoints.
  *     responses:
  *       200:
  *         description: Total optimizations count

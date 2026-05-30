@@ -60,6 +60,30 @@ router.post('/', upload.array('images', 5), async (req, res) => {
             height = THUMBNAIL_SIZES[sizePreset].height;
         }
 
+        // Process all images into memory first so any sharp errors surface before streaming begins
+        const processed = [];
+        for (const file of uploadedFiles) {
+            let pipeline = sharp(file.path).resize({
+                width: width,
+                height: height,
+                fit: 'cover',
+                position: 'centre',
+            });
+
+            if (format === 'jpeg') {
+                pipeline = pipeline.flatten({ background: '#ffffff' });
+            }
+
+            const thumbnailBuffer = await pipeline.toFormat(format, { quality: quality }).toBuffer();
+            const originalName = path.parse(file.originalname).name;
+            processed.push({ buffer: thumbnailBuffer, filename: `${originalName}_thumb.${format}` });
+
+            fs.unlink(file.path, (err) => {
+                if (err) console.error(`Failed to delete temp file for ${file.originalname}:`, err);
+            });
+        }
+
+        // All images processed successfully — now stream the ZIP
         res.set('Content-Type', 'application/zip');
         res.set('Content-Disposition', 'attachment; filename="thumbnails.zip"');
 
@@ -73,44 +97,24 @@ router.post('/', upload.array('images', 5), async (req, res) => {
             }
         });
 
-        archive.on('error', (err) => { 
+        archive.on('error', (err) => {
             console.error('Archiver error:', err);
-            if (!res.headersSent) res.status(500).json({ error: 'Failed to generate archive.' });
         });
 
         archive.pipe(res);
 
-        for (let i = 0; i < uploadedFiles.length; i++) {
-            const file = uploadedFiles[i];
-
-            let pipeline = sharp(file.path).resize({
-                width: width,
-                height: height,
-                fit: 'cover',
-                position: 'centre',
-            });
-
-            if (format === 'jpeg') {
-                pipeline = pipeline.flatten({ background: '#ffffff' });
-            }
-
-            const thumbnailBuffer = await pipeline.toFormat(format, { quality: quality }).toBuffer();
-
-            const originalName = path.parse(file.originalname).name;
-            const thumbFilename = `${originalName}_thumb.${format}`;
-
-            archive.append(thumbnailBuffer, { name: thumbFilename });
-
-            fs.unlink(file.path, (err) => {
-                if (err) console.error(`Failed to delete temp file for ${file.originalname}:`, err);
-            });
+        for (const { buffer, filename } of processed) {
+            archive.append(buffer, { name: filename });
         }
 
         await archive.finalize();
     } catch (error) {
         console.error('Error generating batch thumbnails:', error);
 
-        for (const file of uploadedFiles) if (file.path) fs.unlink(file.path, () => { });
+        // Only unlink files that haven't been cleaned up yet
+        for (const file of uploadedFiles) {
+            if (file.path) fs.unlink(file.path, () => { });
+        }
 
         if (!res.headersSent) {
             res.status(500).json({ error: 'Failed to generate thumbnails.' });

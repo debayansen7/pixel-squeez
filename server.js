@@ -21,9 +21,6 @@ const app = express();
 // Use the port provided by the host environment, or default to 3000 locally
 const PORT = process.env.PORT || 7187;
 
-// Configure Swagger Documentation
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocs));
-
 // Configure CORS to only allow requests from your specific frontend domain
 const corsOptions = {
     origin: process.env.FRONTEND_URL || '*', // Allow all by default to let Swagger UI work without blocking
@@ -37,6 +34,9 @@ app.use(cors(corsOptions));
 // so the rate limiter tracks the actual user's IP instead of the load balancer's IP.
 app.set('trust proxy', 1);
 
+// Swagger docs are served before the rate limiter so they are never throttled
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocs));
+
 // Configure rate limiting to protect against spam/abuse
 const limiter = rateLimit({
     windowMs: 1 * 60 * 1000, // 1 minute window
@@ -46,7 +46,7 @@ const limiter = rateLimit({
     legacyHeaders: false, // Disable the `X-RateLimit-*` headers
 });
 
-// Apply rate limiter globally to all requests
+// Apply rate limiter only to API routes (not /api-docs)
 app.use(limiter);
 
 const logFilePath = path.join(__dirname, 'api-requests.log');
