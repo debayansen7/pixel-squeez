@@ -43,7 +43,8 @@ router.post('/', upload.single('image'), async (req, res) => {
             return res.status(400).json({ error: 'Quality must be a number between 1 and 100.' });
         }
 
-        let imagePipeline = sharp(req.file.path);
+        // .rotate() auto-corrects EXIF orientation (required since Sharp v0.32 — not applied automatically)
+        let imagePipeline = sharp(req.file.path).rotate();
 
         if (width || height) {
             imagePipeline = imagePipeline.resize({ width: width, height: height, fit: 'inside' });

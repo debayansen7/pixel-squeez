@@ -63,20 +63,23 @@ router.post('/', upload.array('images', 5), async (req, res) => {
         // Process all images into memory first so any sharp errors surface before streaming begins
         const processed = [];
         for (const file of uploadedFiles) {
-            let pipeline = sharp(file.path).resize({
-                width: width,
-                height: height,
-                fit: 'cover',
-                position: 'centre',
-            });
+            // .rotate() auto-corrects EXIF orientation (required since Sharp v0.32 — not applied automatically)
+            // .flatten() must run before .resize() so anti-aliased transparent edges are filled cleanly
+            let pipeline = sharp(file.path).rotate();
 
             if (format === 'jpeg') {
                 pipeline = pipeline.flatten({ background: '#ffffff' });
             }
 
+            pipeline = pipeline.resize({
+                width: width,
+                height: height,
+                fit: 'inside',
+            });
+
             const thumbnailBuffer = await pipeline.toFormat(format, { quality: quality }).toBuffer();
             const originalName = path.parse(file.originalname).name;
-            processed.push({ buffer: thumbnailBuffer, filename: `${originalName}_thumb.${format}` });
+            processed.push({ buffer: thumbnailBuffer, filename: `${originalName}_thumbnail.${format}` });
 
             fs.unlink(file.path, (err) => {
                 if (err) console.error(`Failed to delete temp file for ${file.originalname}:`, err);

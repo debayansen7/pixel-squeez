@@ -1,6 +1,7 @@
 const express = require('express');
 const sharp = require('sharp');
 const fs = require('fs');
+const path = require('path');
 const upload = require('../middleware/upload');
 const metrics = require('../utils/metrics');
 const { THUMBNAIL_SIZES } = require('../config/constants');
@@ -55,23 +56,28 @@ router.post('/', upload.single('image'), async (req, res) => {
         }
 
         // 4. Build the Sharp pipeline
-        let pipeline = sharp(req.file.path).resize({
-            width: width,
-            height: height,
-            fit: 'cover',
-            position: 'centre',
-        });
+        // .rotate() auto-corrects EXIF orientation (required since Sharp v0.32 — not applied automatically)
+        // .flatten() must run before .resize() so anti-aliased transparent edges are filled cleanly
+        let pipeline = sharp(req.file.path).rotate();
 
         if (format === 'jpeg') {
             pipeline = pipeline.flatten({ background: '#ffffff' });
         }
+
+        pipeline = pipeline.resize({
+            width: width,
+            height: height,
+            fit: 'inside',
+        });
 
         const { data: thumbnailBuffer, info: thumbMeta } = await pipeline
             .toFormat(format, { quality: quality })
             .toBuffer({ resolveWithObject: true });
 
         // 6. Send the thumbnail back to the user
+        const originalName = path.parse(req.file.originalname).name;
         res.set('Content-Type', `image/${format}`);
+        res.set('Content-Disposition', `attachment; filename="${originalName}_thumbnail.${format}"`);
         res.set('X-Original-Size', req.file.size.toString());
         res.set('X-Thumbnail-Size', thumbnailBuffer.length.toString());
         res.set('X-Thumbnail-Width', thumbMeta.width.toString());
